@@ -1,0 +1,61 @@
+{
+  "name": "white-language",
+  "scopeName": "source.white-language",
+  "fileTypes": [
+    "wl"
+  ],
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "name": "keyword.control.white-language",
+      "match": "\\b(Bool|Byte|Float|Function|Int|Long|String|Struct|Vector|Void|as|break|const|continue|deref|else|extern|for|from|func|if|import|in|is|let|null|nullptr|ptr|ref|return|struct|this|while)\\b"
+    },
+    {
+      "name": "string.quoted.double.white-language",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "include": "#string-character-escape"
+        }
+      ]
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.block.white-language",
+          "begin": "/\\*",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.white-language"
+            }
+          },
+          "end": "\\*/",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.white-language"
+            }
+          }
+        },
+        {
+          "begin": "//",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.whitespace.comment.leading.white-language"
+            }
+          },
+          "end": "(?=$)",
+          "name": "comment.line.white-language"
+        }
+      ]
+    },
+    "string-character-escape": {
+      "name": "constant.character.escape.white-language",
+      "match": "\\\\(x[0-9A-Fa-f]{2}|u[0-9A-Fa-f]{4}|u\\{[0-9A-Fa-f]+\\}|[0-2][0-7]{0,2}|3[0-6][0-7]?|37[0-7]?|[4-7][0-7]?|.|$)"
+    }
+  }
+}

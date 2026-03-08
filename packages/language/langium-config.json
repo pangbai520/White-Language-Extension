@@ -1,0 +1,16 @@
+{
+    "projectName": "WhiteLanguage",
+    "languages": [
+        {
+            "id": "white-language",
+            "grammar": "src/white-language.langium",
+            "fileExtensions": [
+                "wl"
+            ],
+            "textMate": {
+                "out": "syntaxes/white-language.tmLanguage.json"
+            }
+        }
+    ],
+    "out": "src/generated"
+}

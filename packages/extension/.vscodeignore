@@ -1,0 +1,14 @@
+.vscode/**
+.vscode-test/**
+
+src/**
+tsconfig.json
+tsconfig.tsbuildinfo
+esbuild.mjs
+langium-quickstart.md
+bak.png
+
+node_modules/**
+
+../../**
+../**

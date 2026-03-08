@@ -1,0 +1,98 @@
+{
+    "name": "vscode-white-language-extension",
+    "description": "The extension specific package",
+    "version": "0.0.5",
+    "icon": "icon.png",
+    "displayName": "White Language Extension",
+    "publisher": "whitelang-dev",
+    "author": {
+        "name": "旁白"
+    },
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/pangbai520/White-Language-Extension"
+    },
+    "type": "module",
+    "engines": {
+        "vscode": "^1.67.0"
+    },
+    "categories": [
+        "Programming Languages"
+    ],
+    "contributes": {
+        "commands": [
+            {
+                "command": "whitelang.run",
+                "title": "Run White Language Code",
+                "icon": "$(play)"
+            }
+        ],
+        "menus": {
+            "editor/title/run": [
+                {
+                    "command": "whitelang.run",
+                    "when": "resourceExtname == .wl",
+                    "group": "navigation"
+                }
+            ]
+        },
+        "snippets": [
+            {
+                "language": "white-language",
+                "path": "./snippets/whitelang.json"
+            }
+        ],
+        "languages": [
+            {
+                "id": "white-language",
+                "aliases": [
+                    "White Language",
+                    "white-language"
+                ],
+                "extensions": [
+                    ".wl"
+                ],
+                "configuration": "./language-configuration.json",
+                "icon": {
+                    "light": "./resources/light.svg",
+                    "dark": "./resources/dark.svg"
+                }
+            }
+        ],
+        "grammars": [
+            {
+                "language": "white-language",
+                "scopeName": "source.white-language",
+                "path": "syntaxes/white-language.tmLanguage.json"
+            }
+        ]
+    },
+    "activationEvents": [
+        "onLanguage:white-language"
+    ],
+    "main": "./out/extension/main.cjs",
+    "scripts": {
+        "clean": "shx rm -fr *.tsbuildinfo out syntaxes",
+        "vscode:prepublish": "npm run build",
+        "build:prepare": "shx mkdir -p ./syntaxes/ && shx cp -f ../language/syntaxes/white-language.tmLanguage.json ./syntaxes/white-language.tmLanguage.json",
+        "build": "npm run build:prepare && tsc -b tsconfig.json && node esbuild.mjs",
+        "build:clean": "npm run clean && npm run build",
+        "watch": "npm run build:prepare && concurrently -n tsc,esbuild -c blue,yellow \"tsc -b tsconfig.json --watch\" \"node esbuild.mjs --watch\"",
+        "package": "vsce package"
+    },
+    "dependencies": {
+        "vscode-languageclient": "~9.0.1",
+        "vscode-languageserver": "~9.0.1",
+        "white-language-language": "0.0.1"
+    },
+    "devDependencies": {
+        "@types/vscode": "~1.67.0",
+        "@vscode/vsce": "^3.7.1",
+        "concurrently": "~8.2.1",
+        "esbuild": "~0.25.5"
+    },
+    "vsce": {
+        "dependencies": true
+    }
+}

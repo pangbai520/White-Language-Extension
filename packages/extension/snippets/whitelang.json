@@ -1,0 +1,47 @@
+{
+  "Function Declaration": {
+    "prefix": "func",
+    "body": [
+      "func ${1:name}(${2:args -> ${3:Type}}) -> ${4:Type} {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Create a White Language function"
+  },
+  "Struct Declaration": {
+    "prefix": "struct",
+    "body": [
+      "struct ${1:Name}(${2:args -> ${3:Type}}) {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Create a White Language struct with initialization body"
+  },
+  "If Statement": {
+    "prefix": "if",
+    "body": [
+      "if (${1:condition}) {",
+      "\t$0",
+      "}"
+    ],
+    "description": "If block"
+  },
+  "For Loop": {
+    "prefix": "for",
+    "body": [
+      "for (${1:i} -> Int = 0; ${1:i} < ${2:count}; ${1:i}++) {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Standard for loop"
+  },
+  "While Loop": {
+    "prefix": "while",
+    "body": [
+      "while (${1:condition}) {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Standard while loop"
+  }
+}

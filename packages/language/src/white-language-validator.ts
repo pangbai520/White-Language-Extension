@@ -9,7 +9,7 @@ export class WhiteLanguageValidator {
         let rightExpr: ast.Expression | undefined;
 
         if (ast.isVariableDecl(node) || ast.isForVarDecl(node)) {
-            if (!node.value) return; 
+            if (!node.value) return;
             leftType = this.getTypeString(node.type, node.isPtr, node.ptrLevel);
             rightExpr = node.value;
         } else {
@@ -21,9 +21,9 @@ export class WhiteLanguageValidator {
             const rightType = this.inferExpressionType(rightExpr);
 
             if (!this.isTypeCompatible(leftType, rightType)) {
-                accept('error', `Type mismatch: cannot assign '${rightType}' to '${leftType}'.`, { 
-                    node, 
-                    property: (ast.isVariableDecl(node) || ast.isForVarDecl(node)) ? 'value' : 'right' 
+                accept('error', `Type mismatch: cannot assign '${rightType}' to '${leftType}'.`, {
+                    node,
+                    property: (ast.isVariableDecl(node) || ast.isForVarDecl(node)) ? 'value' : 'right'
                 });
             }
         }
@@ -49,9 +49,9 @@ export class WhiteLanguageValidator {
             if (ast.isLiteral(expr.right)) {
                 const val = expr.right.value;
                 if (val === 0 || val === 0.0 || val === '0' || val === '0.0') {
-                    accept('error', 'ZeroDivisionError: Division by zero is not allowed.', { 
-                        node: expr, 
-                        property: 'right' 
+                    accept('error', 'ZeroDivisionError: Division by zero is not allowed.', {
+                        node: expr,
+                        property: 'right'
                     });
                 }
             }
@@ -72,7 +72,7 @@ export class WhiteLanguageValidator {
         }
     }
 
-private isTypeCompatible(expected: string, actual: string): boolean {
+    private isTypeCompatible(expected: string, actual: string): boolean {
         if (expected === 'Any' || actual === 'Any' || expected === actual) {
             return true;
         }
@@ -88,6 +88,9 @@ private isTypeCompatible(expected: string, actual: string): boolean {
         if (actual === 'Int' && expected === 'Long') return true;
         if (actual === 'Byte' && (expected === 'Int' || expected === 'Long')) return true;
 
+        if (expected.startsWith('ptr<') && actual === 'ptr<Void>') return true;
+        if (actual.startsWith('ptr<') && expected === 'ptr<Void>') return true;
+
         return false;
     }
 
@@ -100,7 +103,7 @@ private isTypeCompatible(expected: string, actual: string): boolean {
             if (text === 'null' || text === 'nullptr') return 'Pointer';
             return 'Int';
         }
-        
+
         if (ast.isReference(expr)) {
             const decl = expr.ref?.ref;
             if (decl) {
@@ -152,14 +155,14 @@ private isTypeCompatible(expected: string, actual: string): boolean {
         let typeName = "Any";
 
         if (ast.isPrimitiveType(type)) {
-            typeName = type.name ?? 'Any'; 
-        } 
+            typeName = type.name ?? 'Any';
+        }
         else if (ast.isNamedType(type)) {
             typeName = type.ref?.ref?.name ?? 'Unknown';
-        } 
+        }
         else if (ast.isPointerType(type)) {
             typeName = `ptr<${this.getTypeString(type.elementType)}>`;
-        } 
+        }
         else if (ast.isVectorType(type)) {
             typeName = 'Vector';
         }
@@ -216,7 +219,7 @@ private isTypeCompatible(expected: string, actual: string): boolean {
 export function registerValidationChecks(services: WhiteLanguageServices) {
     const registry = services.validation.ValidationRegistry;
     const validator = services.validation.WhiteLanguageValidator;
-    
+
     const checks: ValidationChecks<ast.WhiteLanguageAstType> = {
         VariableDecl: [validator.checkAssignment],
         ForVarDecl: [validator.checkAssignment],
@@ -229,6 +232,6 @@ export function registerValidationChecks(services: WhiteLanguageServices) {
         ExternFuncDecl: validator.checkFunctionParams,
         Block: validator.checkUnreachableCode
     };
-    
+
     registry.register(checks, validator);
 }

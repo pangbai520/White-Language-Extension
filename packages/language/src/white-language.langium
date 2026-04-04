@@ -13,7 +13,7 @@ Statement:
 
 DeclarationStmt:
     (VariableDecl | ExternSingleStmt) ';' |
-    (FunctionDecl | StructDecl | ExternBlock); 
+    (FunctionDecl | StructDecl | ClassDecl | ExternBlock);
 
 ControlStmt:
     IfStmt | WhileStmt | ForStmt;
@@ -33,22 +33,43 @@ Block:
 // ==========================================
 // Declarations
 // ==========================================
-type Declaration = VariableDecl | FunctionDecl | StructDecl | ExternFuncDecl | ForVarDecl | Param | SymbolImport | FileImport;
+type Declaration = VariableDecl | FunctionDecl | StructDecl | ClassDecl | ClassField | ClassMethod | ClassInit | ClassDeinit | ExternFuncDecl | ForVarDecl | Param | SymbolImport |
+    FileImport;
 
 VariableDecl:
-    {infer VariableDecl} kind=('let' | 'const') (isPtr?='ptr' ('*' ptrLevel=INT)?)? name=ID '->' type=TypeReference ('=' value=Expression)?;
+    {infer VariableDecl} kind=('let' | 'const') (isPtr?='ptr' ('*' ptrLevel=INT)?)? name=ValidID '->' type=TypeReference ('=' value=Expression)?;
 
 ForVarDecl:
-    {infer ForVarDecl} (isPtr?='ptr' ('*' ptrLevel=INT)?)? name=ID '->' type=TypeReference ('=' value=Expression)?;
+    {infer ForVarDecl} (isPtr?='ptr' ('*' ptrLevel=INT)?)? name=ValidID '->' type=TypeReference ('=' value=Expression)?;
 
 FunctionDecl:
-    {infer FunctionDecl} 'func' name=ID '(' (params+=Param (',' params+=Param)*)? (','? varArgs?='...')? ')' ('->' returnType=TypeReference) body=Block;
+    {infer FunctionDecl} 'func' name=ValidID '(' (params+=Param (',' params+=Param)*)? (','? varArgs?='...')? ')' ('->' returnType=TypeReference) body=Block;
 
 Param:
-    {infer Param} (isPtr?='ptr' ('*' ptrLevel=INT)?)? name=ID '->' type=TypeReference;
+    {infer Param} (isPtr?='ptr' ('*' ptrLevel=INT)?)? name=ValidID '->' type=TypeReference;
 
 StructDecl:
-    {infer StructDecl} 'struct' name=ID '(' (fields+=Param (',' fields+=Param)*)? ')' (body=Block)? ';'? ;
+    {infer StructDecl} 'struct' name=ValidID '(' (fields+=Param (',' fields+=Param)*)? ')' (body=Block)? ';'? ;
+
+ClassDecl:
+    {infer ClassDecl} 'class' name=ValidID ('(' superClass=[Declaration:ValidID] ')')? leftBrace='{'
+        (members+=ClassMember)*
+    rightBrace='}';
+
+ClassMember:
+    ClassField | ClassMethod | ClassInit | ClassDeinit;
+
+ClassField:
+    {infer ClassField} kind=('let' | 'const') (isPtr?='ptr' ('*' ptrLevel=INT)?)? name=ValidID '->' type=TypeReference ('=' value=Expression)? ';';
+
+ClassInit:
+    {infer ClassInit} name='init' '(' (params+=Param (',' params+=Param)*)? ')' ('->' returnType=TypeReference)? body=Block;
+
+ClassDeinit:
+    {infer ClassDeinit} name='deinit' '(' ')' ('->' returnType=TypeReference)? body=Block;
+
+ClassMethod:
+    {infer ClassMethod} 'method' name=ValidID '(' (params+=Param (',' params+=Param)*)? (','? varArgs?='...')? ')' ('->' returnType=TypeReference) body=Block;
 
 ExternBlock:
     {infer ExternBlock} 'extern' abi=STRING leftBrace='{' (funcs+=ExternFuncDecl ';')* rightBrace='}';
@@ -57,7 +78,7 @@ ExternSingleStmt:
     {infer ExternSingleStmt} 'extern' func=ExternFuncDecl ('from' abi=STRING)?;
 
 ExternFuncDecl:
-    {infer ExternFuncDecl} 'func' name=ID '(' (params+=Param (',' params+=Param)*)? (','? varArgs?='...')? ')' ('->' returnType=TypeReference)?;
+    {infer ExternFuncDecl} 'func' name=ValidID '(' (params+=Param (',' params+=Param)*)? (','? varArgs?='...')? ')' ('->' returnType=TypeReference)?;
 
 // ==========================================
 // Imports
@@ -70,16 +91,16 @@ Import:
     ) ';'?;
 
 FileImport:
-    path=STRING ('as' name=ID)?;
+    path=STRING ('as' name=ValidID)?;
 
 SymbolImport:
-    importedElement=[Declaration:ID] ('as' name=ID)?;
+    importedElement=[Declaration:ValidID] ('as' name=ValidID)?;
 
 // ==========================================
 // Control Flow
 // ==========================================
 IfStmt: {infer IfStmt} 'if' condition=Expression thenBlock=Block ('else' (elseIf=IfStmt | elseBlock=Block))? ';'? ;
-WhileStmt: {infer WhileStmt} 'while' '(' condition=Expression ')' body=Block ';'? ;
+WhileStmt: {infer WhileStmt} 'while' condition=Expression body=Block ';'? ;
 ForStmt: {infer ForStmt} 'for' '(' (init=(VariableDecl | ForVarDecl | Expression))? ';' condition=Expression ';' (step=Expression)? ')' body=Block ';'? ;
 
 ReturnStmt: {infer ReturnStmt} 'return' (value=Expression)?;
@@ -94,7 +115,7 @@ PointerType: {infer PointerType} 'ptr' ('*' level=INT)? elementType=TypeReferenc
 VectorType: {infer VectorType} 'Vector' ('(' elementType=TypeReference ')')?;
 FunctionType: {infer FunctionType} 'Function' ('(' returnType=TypeReference ')')?;
 PrimitiveType: {infer PrimitiveType} name=('Int' | 'Float' | 'String' | 'Bool' | 'Void' | 'Byte' | 'Long' | 'Struct');
-NamedType: {infer NamedType} ref=[Declaration:ID];
+NamedType: {infer NamedType} ref=[Declaration:ValidID];
 
 // ==========================================
 // Expressions
@@ -132,25 +153,30 @@ Unary infers Expression:
 
 Postfix infers Expression:
     Primary (
-        {infer MemberAccess.receiver=current} '.' member=ID |
+        {infer MemberAccess.receiver=current} '.' member=ValidID |
         {infer ArrayAccess.receiver=current} '[' index=Expression ']' |
         {infer FunctionCall.caller=current} '(' (args+=Argument (',' args+=Argument)*)? ')' |
         {infer PostfixUpdate.operand=current} op=('++' | '--')
     )*;
 
+ValidID returns string:
+    ID | 'init' | 'deinit' | 'this' | 'self' | 'super';
+
 Primary infers Expression:
     '(' Expression ')' |
     {infer Literal} value=(INT | FLOAT | STRING | BOOLEAN | 'null' | 'nullptr') |
     'this' {infer ThisExpression} |
+    'self' {infer SelfExpression} |
+    'super' {infer SuperExpression} |
     {infer VectorLiteral} '[' (elements+=Expression (',' elements+=Expression)*)? ']' |
-    {infer Reference} ref=[Declaration:ID];
+    {infer Reference} ref=[Declaration:ValidID];
 
-Argument: (name=ID '=')? value=Expression;
+Argument: (name=ValidID '=')? value=Expression;
 
 // ==========================================
 // Terminals
 // ==========================================
-terminal BOOLEAN returns boolean: 'true' | 'false';
+BOOLEAN returns boolean: 'true' | 'false';
 terminal FLOAT returns number: /[0-9]*\.[0-9]+/;
 terminal INT returns number: /[0-9]+/;
 terminal STRING: /"(\\.|[^"\\])*"/;

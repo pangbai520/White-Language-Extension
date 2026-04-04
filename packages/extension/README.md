@@ -1,40 +1,39 @@
 # White Language VSCode Extension
 
-Official Visual Studio Code language support for **White Language** (`.wl`). 
+Visual Studio Code support for **White Language** (`.wl`). 
 
-White Language is a modern, strongly-typed programming language featuring an LLVM backend and Automatic Reference Counting (ARC). This extension provides a fully-fledged Language Server Protocol (LSP) implementation, transforming VSCode into a powerful, industrial-grade IDE for White Language development. 
-
-Designed specifically to support the [White Language](https://github.com/pangbai520/White-Language) Stage 1 self-hosting compiler, this extension offers deep code comprehension and a seamless developer experience.
+This extension implements the Language Server Protocol (LSP) to support the [White Language](https://github.com/pangbai520/White-Language) Stage 1 self-hosting compiler. It provides code navigation, semantic highlighting, and integrated build tools for WL development.
 
 ## Key Features
 
-* **Semantic Syntax Highlighting:** Goes beyond basic regular expressions. The extension thoroughly understands your AST, providing precise colors for multi-level indirection, generic functions, structs, and cross-file namespaces.
-* **Intelligent Code Completion:** Context-aware suggestions. Type `.` to reveal struct fields, member functions, or imported module exports.
-* **Real-time Diagnostics:** Catch errors while you type. Includes strict type checking, division-by-zero detection, unreachable code fading, and variable assignment validation.
-* **Hover Information:** Simply hover your cursor over any variable, function, or struct to reveal its complete type signature and declaration details.
-* **Signature Help:** Never forget a function parameter again. Typing `(` automatically triggers an inline overlay detailing the expected arguments and their types.
-* **Document Outline:** Easily navigate through massive codebases (like `WhitelangCompiler.wl`) via the native VSCode outline panel, complete with custom icons for structs, functions, and `extern` interfaces.
-* **One-Click Run:** Features a convenient `▶` button in the editor title bar. Click it to automatically invoke the compiler and execute the resulting binary within the integrated terminal.
+* **OOP & ARC Navigation:** Supports class hierarchy tracking, VTable method dispatch, and ARC-related symbols (`init`/`deinit`).
+* **Semantic Highlighting:** Accurate coloring for multi-level pointers (`ptr*2`), generics, and namespaces.
+* **Formatter:** Automatic indentation for class bodies, `extern` blocks, and long struct definitions (5+ fields).
+* **Module Resolution:** `Ctrl+Click` to jump to source for standard library (`std/`) and package entries (`_pkg.wl`).
+* **Intelligent Tooling:** Context-aware completion, signature help for function parameters, and symbol outline.
+* **Diagnostics:** Real-time syntax and type checking.
+* **Quick Run:** Click the `▶` button in the editor title bar to compile and run the current file.
 
 ## Requirements
 
-To enable the full suite of IDE features (LSP, diagnostics, and formatting), ensure your environment meets the following criteria:
+To get the most out of this extension, you'll need:
 
-* **White Language Compiler:** Version `0.1` or higher must be installed.
-* **System PATH:** The compiler binary (`wlc` or `wlc.exe`) should be accessible via your system's PATH environment variable.
-* **VS Code Version:** Visual Studio Code `v1.75.0` or newer is recommended for optimal semantic highlighting performance.
+* **White Language Compiler:** `wlc` (v0.1+) must be installed and added to your **PATH**.
+* **VS Code:** `v1.75.0` or newer (required for semantic highlighting).
 
 ## Quick Start
 
 1. Install the extension in Visual Studio Code.
 2. Open any `.wl` file.
-3. Ensure the White Language Compiler (`wlc` / `wlc.exe`) is accessible in your system's **PATH**. (Tip: Try running `wlc --version` in your terminal to verify).
+3. Ensure the White Language Compiler (`wlc` / `wlc.exe`) is accessible in your system's **PATH**.
 4. Start writing code or click the **Run** button in the top-right corner to compile and execute your program instantly.
 
 ## Snippets Included
 
 The extension comes bundled with standard snippets to accelerate your workflow. Simply type the prefix and press `Tab`:
 
+* `class` — Generates an OOP class template with `init` and `deinit`.
+* `method` — Generates a class method declaration.
 * `func` — Generates a function declaration template.
 * `struct` — Generates a struct initialization block.
 * `if` / `while` / `for` — Generates standard control flow structures.
@@ -70,3 +69,4 @@ To generate a `.vsix` file for manual installation:
 ```bash
 cd White-Language-Extension/packages/extension
 npm run package
+```

@@ -1,7 +1,7 @@
 {
     "name": "vscode-white-language-extension",
     "description": "The extension specific package",
-    "version": "0.0.5",
+    "version": "1.0.2",
     "icon": "icon.png",
     "displayName": "White Language Extension",
     "publisher": "whitelang-dev",
@@ -84,7 +84,7 @@
     "dependencies": {
         "vscode-languageclient": "~9.0.1",
         "vscode-languageserver": "~9.0.1",
-        "white-language-language": "0.0.1"
+        "white-language": "0.0.1"
     },
     "devDependencies": {
         "@types/vscode": "~1.67.0",

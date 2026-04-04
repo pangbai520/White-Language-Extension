@@ -6,16 +6,32 @@
       "\t$0",
       "}"
     ],
-    "description": "Create a White Language function"
+    "description": "Create a function"
+  },
+  "Class Declaration": {
+    "prefix": "class",
+    "body": [
+      "class ${1:ClassName} {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Create a class"
+  },
+  "Method Declaration": {
+    "prefix": "method",
+    "body": [
+      "method ${1:name}(${2:args -> ${3:Type}}) -> ${4:Type} {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Create a class method"
   },
   "Struct Declaration": {
     "prefix": "struct",
     "body": [
-      "struct ${1:Name}(${2:args -> ${3:Type}}) {",
-      "\t$0",
-      "}"
+      "struct ${1:Name}(${2:args -> ${3:Type}})"
     ],
-    "description": "Create a White Language struct with initialization body"
+    "description": "Create a struct"
   },
   "If Statement": {
     "prefix": "if",

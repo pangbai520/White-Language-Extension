@@ -46,6 +46,8 @@ export class WhiteLanguageScopeComputation extends DefaultScopeComputation {
 }
 
 export class WhiteLanguageScopeProvider extends DefaultScopeProvider {
+    private typeCache = new WeakMap<AstNode, ast.StructDecl | ast.ClassDecl | undefined>();
+    private importScopeCache = new WeakMap<AstNode, Scope>();
 
     override getScope(context: ReferenceInfo): Scope {
         const container = context.container;
@@ -94,9 +96,10 @@ export class WhiteLanguageScopeProvider extends DefaultScopeProvider {
                     return this.getScopeFromImportedFile(ref);
                 }
             }
-            const structDef = this.inferStructType(container.receiver);
-            if (structDef) {
-                return this.createScopeForNodes(structDef.fields);
+            const def = this.inferStructOrClassType(container.receiver);
+            if (def) {
+                const members = 'fields' in def ? def.fields : def.members;
+                return this.createScopeForNodes(members);
             }
             return EMPTY_SCOPE;
         }
@@ -105,49 +108,42 @@ export class WhiteLanguageScopeProvider extends DefaultScopeProvider {
     }
 
     private getScopeByPath(contextNode: AstNode, rawPath: string): Scope {
+        if (this.importScopeCache.has(contextNode)) {
+            return this.importScopeCache.get(contextNode)!;
+        }
         const currentDoc = AstUtils.getDocument(contextNode);
         const cleanPath = rawPath.replace(/"/g, '');
+
         const baseUri = Utils.resolvePath(Utils.dirname(currentDoc.uri), cleanPath);
         const baseUriStr = baseUri.toString();
         const fileUri = baseUriStr.endsWith('.wl') ? baseUri : baseUri.with({ path: baseUri.path + '.wl' });
         const fileUriStr = fileUri.toString();
         const dirUriStr = baseUriStr.endsWith('/') ? baseUriStr : baseUriStr + '/';
 
+        const globalFileSuffix = cleanPath.endsWith('.wl') ? `/${cleanPath}` : `/${cleanPath}.wl`;
+        const globalDirSuffix = `/${cleanPath}/`;
+
         const exportedNodes = this.indexManager.allElements().filter(desc => {
             const docUriStr = desc.documentUri.toString();
-            return docUriStr === fileUriStr || docUriStr.startsWith(dirUriStr);
-        });
             
-        return new StreamScope(exportedNodes);
+            if (docUriStr === fileUriStr || docUriStr.startsWith(dirUriStr)) {
+                return true;
+            }
+
+            if (docUriStr.endsWith(globalFileSuffix) || docUriStr.includes(globalDirSuffix)) {
+                return true;
+            }
+
+            return false;
+        });
+
+        const scope = new StreamScope(exportedNodes);
+        this.importScopeCache.set(contextNode, scope);
+        return scope;
     }
 
     public getScopeFromImportedFile(fileImport: ast.FileImport): Scope {
         return this.getScopeByPath(fileImport, fileImport.path);
-    }
-
-    private inferStructType(node: ast.Expression): ast.StructDecl | undefined {
-        if (ast.isReference(node)) {
-            const decl = node.ref?.ref; 
-            if (decl) {
-                const type = ast.isSymbolImport(decl) ? this.getImportedType(decl) : (decl as any).type;
-                return this.resolveTypeToStruct(type);
-            }
-        } 
-        else if (ast.isMemberAccess(node)) {
-            const leftStruct = this.inferStructType(node.receiver);
-            if (leftStruct) {
-                const field = leftStruct.fields.find(f => f.name === node.member);
-                if (field) return this.resolveTypeToStruct(field.type);
-            }
-        } 
-        else if (ast.isDerefExpression(node)) {
-            const base = this.inferPointerBaseType(node.value);
-            if (base) return this.resolveTypeToStruct(base);
-        }
-        else if (ast.isThisExpression(node)) {
-            return AstUtils.getContainerOfType(node, ast.isStructDecl);
-        }
-        return undefined;
     }
 
     private getImportedType(node: ast.SymbolImport): ast.TypeReference | undefined {
@@ -170,16 +166,57 @@ export class WhiteLanguageScopeProvider extends DefaultScopeProvider {
         return undefined;
     }
 
-    private resolveTypeToStruct(type: ast.TypeReference | undefined): ast.StructDecl | undefined {
+    public inferStructOrClassType(node: ast.Expression): ast.StructDecl | ast.ClassDecl | undefined {
+        if (this.typeCache.has(node)) {
+            return this.typeCache.get(node);
+        }
+
+        let result: ast.StructDecl | ast.ClassDecl | undefined = undefined;
+
+        if (ast.isReference(node)) {
+            const decl = node.ref?.ref; 
+            if (decl) {
+                const type = ast.isSymbolImport(decl) ? this.getImportedType(decl) : (decl as any).type;
+                result = this.resolveTypeToStructOrClass(type);
+            }
+        } 
+        else if (ast.isMemberAccess(node)) {
+            const leftDef = this.inferStructOrClassType(node.receiver);
+            if (leftDef) {
+                const members = 'fields' in leftDef ? leftDef.fields : leftDef.members;
+                const field = members.find((f: any) => f.name === node.member);
+                if (field) result = this.resolveTypeToStructOrClass((field as any).type);
+            }
+        } 
+        else if (ast.isDerefExpression(node)) {
+            const base = this.inferPointerBaseType(node.value);
+            if (base) result = this.resolveTypeToStructOrClass(base);
+        }
+        else if (ast.isThisExpression(node) || ast.isSelfExpression(node)) {
+            result = AstUtils.getContainerOfType(node, ast.isStructDecl) ?? AstUtils.getContainerOfType(node, ast.isClassDecl);
+        }
+        else if (ast.isSuperExpression(node)) {
+            const cls = AstUtils.getContainerOfType(node, ast.isClassDecl);
+            if (cls && cls.superClass?.ref) {
+                const superDecl = cls.superClass.ref;
+                if (ast.isClassDecl(superDecl)) result = superDecl;
+            }
+        }
+
+        this.typeCache.set(node, result);
+        return result;
+    }
+
+    private resolveTypeToStructOrClass(type: ast.TypeReference | undefined): ast.StructDecl | ast.ClassDecl | undefined {
         if (!type) return undefined;
-        if (ast.isPointerType(type)) return this.resolveTypeToStruct(type.elementType);
+        if (ast.isPointerType(type)) return this.resolveTypeToStructOrClass(type.elementType);
         
         if (ast.isNamedType(type) && type.ref) {
             let ref = type.ref.ref;
             if (ast.isSymbolImport(ref)) {
                 ref = ref.importedElement?.ref;
             }
-            if (ast.isStructDecl(ref)) return ref;
+            if (ast.isStructDecl(ref) || ast.isClassDecl(ref)) return ref;
         }
         return undefined;
     }

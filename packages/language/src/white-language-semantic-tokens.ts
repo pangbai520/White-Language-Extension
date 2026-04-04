@@ -42,8 +42,23 @@ export class WhiteLanguageSemanticTokenProvider extends AbstractSemanticTokenPro
             const type = ast.isStructDecl(node.$container) ? SemanticTokenTypes.property : SemanticTokenTypes.parameter;
             acceptor({ node, property: 'name', type: type });
         }
-        else if (ast.isStructDecl(node)) {
+        else if (ast.isStructDecl(node) || ast.isClassDecl(node)) {
             acceptor({ node, property: 'name', type: SemanticTokenTypes.class });
+            if (ast.isClassDecl(node) && node.superClass) {
+                acceptor({ node, property: 'superClass', type: SemanticTokenTypes.class });
+            }
+        }
+        else if (ast.isClassField(node)) {
+            if (node.isPtr) this.highlightPtr(node, acceptor);
+            const modifiers = node.kind === 'const' ? [SemanticTokenModifiers.readonly] : [];
+            acceptor({ node, property: 'name', type: SemanticTokenTypes.property, modifier: modifiers });
+        }
+        else if (ast.isClassMethod(node)) {
+            this.highlightKeywordOrValue(node, 'method', acceptor);
+            acceptor({ node, property: 'name', type: SemanticTokenTypes.method });
+        }
+        else if (ast.isClassInit(node) || ast.isClassDeinit(node)) {
+            acceptor({ node, property: 'name', type: SemanticTokenTypes.method });
         }
         else if (ast.isFunctionDecl(node) || ast.isExternFuncDecl(node)) {
             acceptor({ node, property: 'name', type: SemanticTokenTypes.function });
@@ -110,6 +125,14 @@ export class WhiteLanguageSemanticTokenProvider extends AbstractSemanticTokenPro
             const cst = this.findCstByText(node.$cstNode, 'this');
             if (cst) acceptor({ cst, type: SemanticTokenTypes.keyword });
         }
+        else if (ast.isSelfExpression(node)) {
+            const cst = this.findCstByText(node.$cstNode, 'self');
+            if (cst) acceptor({ cst, type: SemanticTokenTypes.keyword });
+        }
+        else if (ast.isSuperExpression(node)) {
+            const cst = this.findCstByText(node.$cstNode, 'super');
+            if (cst) acceptor({ cst, type: SemanticTokenTypes.keyword });
+        }
         else if (ast.isDerefExpression(node)) {
             this.highlightKeywordOrValue(node, 'deref', acceptor);
             if (node.level) {
@@ -123,10 +146,12 @@ export class WhiteLanguageSemanticTokenProvider extends AbstractSemanticTokenPro
 
     private highlightMemberAccess(node: ast.MemberAccess, acceptor: SemanticTokenAcceptor) {
         const receiver = node.receiver;
+
         if (ast.isFunctionCall(node.$container) && node.$container.caller === node) {
             acceptor({ node, property: 'member', type: SemanticTokenTypes.function });
             return;
         }
+
         if (ast.isReference(receiver)) {
             let ref = receiver.ref?.ref;
             if (ast.isSymbolImport(ref)) {
@@ -138,37 +163,40 @@ export class WhiteLanguageSemanticTokenProvider extends AbstractSemanticTokenPro
                 
                 if (element) {
                     const typeName = element.type;
-                    if (typeName.endsWith('FunctionDecl') || typeName.endsWith('ExternFuncDecl')) {
+                    if (typeName.endsWith('FunctionDecl') || typeName.endsWith('ExternFuncDecl') || typeName.endsWith('ClassMethod')) {
                         acceptor({ node, property: 'member', type: SemanticTokenTypes.function });
                         return;
-                    } else if (typeName.endsWith('StructDecl')) {
+                    } else if (typeName.endsWith('StructDecl') || typeName.endsWith('ClassDecl')) {
                         acceptor({ node, property: 'member', type: SemanticTokenTypes.class });
                         return;
                     }
                 }
             }
         }
-        const structDef = (this.scopeProvider as any).inferStructType(receiver) as ast.StructDecl | undefined;
-        if (structDef) {
-            const field = structDef.fields.find((f: ast.Param) => f.name === node.member);
+
+        const def = (this.scopeProvider as any).inferStructOrClassType(receiver) as ast.StructDecl | ast.ClassDecl | undefined;
+        if (def) {
+            const members = 'fields' in def ? def.fields : def.members;
+            const field = members.find((f: any) => f.name === node.member);
             if (field) {
-                if (ast.isFunctionType(field.type)) {
+                if (ast.isClassMethod(field) || ast.isClassInit(field) || ast.isClassDeinit(field) || ast.isFunctionType((field as any).type)) {
                     acceptor({ node, property: 'member', type: SemanticTokenTypes.function });
-                    return;
+                } else {
+                    acceptor({ node, property: 'member', type: SemanticTokenTypes.property });
                 }
-                acceptor({ node, property: 'member', type: SemanticTokenTypes.property });
                 return;
             }
         }
+
         acceptor({ node, property: 'member', type: SemanticTokenTypes.property });
     }
 
     private highlightDeclarationType(node: AstNode, property: string, ref: ast.Declaration, acceptor: SemanticTokenAcceptor) {
-        if (ast.isStructDecl(ref)) {
+        if (ast.isStructDecl(ref) || ast.isClassDecl(ref)) {
             acceptor({ node, property, type: SemanticTokenTypes.class });
-        } else if (ast.isFunctionDecl(ref) || ast.isExternFuncDecl(ref)) {
+        } else if (ast.isFunctionDecl(ref) || ast.isExternFuncDecl(ref) || ast.isClassMethod(ref)) {
             acceptor({ node, property, type: SemanticTokenTypes.function });
-        } else if (ast.isVariableDecl(ref)) {
+        } else if (ast.isVariableDecl(ref) || ast.isClassField(ref)) {
             const modifiers = ref.kind === 'const' ? [SemanticTokenModifiers.readonly] : [];
             acceptor({ node, property, type: SemanticTokenTypes.variable, modifier: modifiers });
         } else {
@@ -176,7 +204,7 @@ export class WhiteLanguageSemanticTokenProvider extends AbstractSemanticTokenPro
         }
     }
 
-    private highlightPtr(node: ast.VariableDecl | ast.ForVarDecl | ast.Param, acceptor: SemanticTokenAcceptor) {
+    private highlightPtr(node: ast.VariableDecl | ast.ForVarDecl | ast.Param | ast.ClassField, acceptor: SemanticTokenAcceptor) {
         this.highlightKeywordOrValue(node, 'ptr', acceptor);
         if (node.ptrLevel !== undefined) {
             this.highlightKeywordOrValue(node, node.ptrLevel.toString(), acceptor, SemanticTokenTypes.number);

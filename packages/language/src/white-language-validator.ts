@@ -85,11 +85,24 @@ export class WhiteLanguageValidator {
             return true;
         }
 
-        if (actual === 'Int' && expected === 'Long') return true;
-        if (actual === 'Byte' && (expected === 'Int' || expected === 'Long')) return true;
+        if (expected === 'Float' && ['Int', 'Byte', 'Long', 'Bool'].includes(actual)) return true;
+        if (expected === 'Long' && ['Int', 'Byte', 'Bool'].includes(actual)) return true;
+        if (expected === 'Int' && ['Byte', 'Bool'].includes(actual)) return true;
+        if (expected === 'Byte' && actual === 'Int') return true; // 后端自带 trunc
+
+        const primitives = ['Int', 'Float', 'Bool', 'Byte', 'Long', 'String', 'Void'];
+
+        if (!primitives.includes(expected) && !primitives.includes(actual)) {
+            return true;
+        }
+
+        if (!primitives.includes(expected) && actual === 'Void') {
+            return true;
+        }
 
         if (expected.startsWith('ptr<') && actual === 'ptr<Void>') return true;
         if (actual.startsWith('ptr<') && expected === 'ptr<Void>') return true;
+        if (expected.startsWith('ptr<') && actual.startsWith('ptr<')) return true;
 
         return false;
     }
@@ -158,7 +171,8 @@ export class WhiteLanguageValidator {
             typeName = type.name ?? 'Any';
         }
         else if (ast.isNamedType(type)) {
-            typeName = type.ref?.ref?.name ?? 'Unknown';
+            const target = type.ref?.ref;
+            typeName = (target && 'name' in target && typeof target.name === 'string') ? target.name : 'Unknown';
         }
         else if (ast.isPointerType(type)) {
             typeName = `ptr<${this.getTypeString(type.elementType)}>`;
@@ -194,12 +208,12 @@ export class WhiteLanguageValidator {
     checkNamedTypeIsStruct(typeNode: ast.NamedType, accept: ValidationAcceptor): void {
         if (typeNode.ref && typeNode.ref.ref) {
             const target = typeNode.ref.ref;
-            if (!ast.isStructDecl(target)) {
+            if (!ast.isStructDecl(target) && !ast.isClassDecl(target)) {
                 let targetName = 'Unknown';
                 if ('name' in target && typeof target.name === 'string') {
                     targetName = target.name;
                 }
-                accept('error', `Symbol '${targetName}' is not a type. Only Structs can be used as named types.`, {
+                accept('error', `Symbol '${targetName}' is not a type. Only Structs and Classes can be used as named types.`, {
                     node: typeNode,
                     property: 'ref'
                 });

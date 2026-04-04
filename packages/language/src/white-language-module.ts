@@ -16,6 +16,8 @@ import { WhiteLanguageHoverProvider } from './white-language-hover-provider.js';
 import { WhiteLanguageCompletionProvider } from './white-language-completion-provider.js';
 import { WhiteLanguageSignatureHelpProvider } from './white-language-signature-provider.js';
 import { WhiteLanguageDocumentSymbolProvider } from './white-language-document-symbol-provider.js';
+import { WhiteLanguageFormatter } from './white-language-formatter.js';
+import { WhiteLanguageDefinitionProvider } from './white-language-goto-resolver.js';
 
 
 export type WhiteLanguageAddedServices = {
@@ -25,7 +27,8 @@ export type WhiteLanguageAddedServices = {
     lsp: {
         SemanticTokenProvider: WhiteLanguageSemanticTokenProvider,
         HoverProvider: WhiteLanguageHoverProvider,
-        CompletionProvider: WhiteLanguageCompletionProvider
+        CompletionProvider: WhiteLanguageCompletionProvider,
+        Formatter: WhiteLanguageFormatter
     }
 }
 
@@ -37,14 +40,16 @@ export const WhiteLanguageModule: Module<WhiteLanguageServices, PartialLangiumSe
     },
     references: {
         ScopeProvider: (services: WhiteLanguageServices) => new WhiteLanguageScopeProvider(services),
-        ScopeComputation: (services: WhiteLanguageServices) => new WhiteLanguageScopeComputation(services)
+        ScopeComputation: (services: WhiteLanguageServices) => new WhiteLanguageScopeComputation(services),
     },
     lsp: {
         SemanticTokenProvider: (services: WhiteLanguageServices) => new WhiteLanguageSemanticTokenProvider(services),
         HoverProvider: (services: WhiteLanguageServices) => new WhiteLanguageHoverProvider(services),
         CompletionProvider: (services: WhiteLanguageServices) => new WhiteLanguageCompletionProvider(services),
         SignatureHelp: () => new WhiteLanguageSignatureHelpProvider(),
-        DocumentSymbolProvider: (services: WhiteLanguageServices) => new WhiteLanguageDocumentSymbolProvider(services)
+        DocumentSymbolProvider: (services: WhiteLanguageServices) => new WhiteLanguageDocumentSymbolProvider(services),
+        Formatter: () => new WhiteLanguageFormatter(),
+        DefinitionProvider: (services) => new WhiteLanguageDefinitionProvider(services)
     }
 };
 
@@ -63,5 +68,6 @@ export function createWhiteLanguageServices(context: DefaultSharedModuleContext)
     );
     shared.ServiceRegistry.register(WhiteLanguage);
     registerValidationChecks(WhiteLanguage);
+
     return { shared, WhiteLanguage };
 }

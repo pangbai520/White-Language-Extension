@@ -1,7 +1,7 @@
 {
     "name": "vscode-white-language-extension",
-    "description": "The extension specific package",
-    "version": "1.0.2",
+    "description": "Official Visual Studio Code extension for White Language.",
+    "version": "1.0.3",
     "icon": "icon.png",
     "displayName": "White Language Extension",
     "publisher": "whitelang-dev",

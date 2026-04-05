@@ -15,16 +15,28 @@ import { Utils } from 'vscode-uri';
 import * as ast from './generated/ast.js';
 
 export class WhiteLanguageScopeComputation extends DefaultScopeComputation {
-
     async computeExports(document: LangiumDocument, _cancelToken?: CancellationToken): Promise<AstNodeDescription[]> {
         const exportedItems: AstNodeDescription[] = [];
         const rootNode = document.parseResult.value;
 
         if (ast.isProgram(rootNode)) {
             for (const node of rootNode.statements) {
-                if (ast.isVariableDecl(node) || ast.isFunctionDecl(node) || ast.isStructDecl(node)) {
+                if (ast.isVariableDecl(node) || ast.isFunctionDecl(node) || ast.isStructDecl(node) || ast.isClassDecl(node)) {
                     if (node.name) {
                         exportedItems.push(this.descriptions.createDescription(node, node.name, document));
+                    }
+                }
+                else if (ast.isImport(node)) {
+                    for (const si of node.symbolImports) {
+                        const name = si.name ?? si.importedElement?.$refText;
+                        if (name) {
+                            exportedItems.push(this.descriptions.createDescription(si, name, document));
+                        }
+                    }
+                    for (const fi of node.fileImports) {
+                        if (fi.name) {
+                            exportedItems.push(this.descriptions.createDescription(fi, fi.name, document));
+                        }
                     }
                 }
                 else if (ast.isExternBlock(node)) {

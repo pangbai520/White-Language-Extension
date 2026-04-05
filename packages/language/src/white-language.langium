@@ -110,11 +110,12 @@ ContinueStmt: {infer ContinueStmt} 'continue';
 // ==========================================
 // Type References
 // ==========================================
-TypeReference: PointerType | VectorType | FunctionType | PrimitiveType | NamedType;
+TypeReference: PointerType | VectorType | FunctionType | MethodType | PrimitiveType | NamedType;
 PointerType: {infer PointerType} 'ptr' ('*' level=INT)? elementType=TypeReference;
 VectorType: {infer VectorType} 'Vector' ('(' elementType=TypeReference ')')?;
 FunctionType: {infer FunctionType} 'Function' ('(' returnType=TypeReference ')')?;
-PrimitiveType: {infer PrimitiveType} name=('Int' | 'Float' | 'String' | 'Bool' | 'Void' | 'Byte' | 'Long' | 'Struct');
+MethodType: {infer MethodType} 'Method' ('(' returnType=TypeReference ')')?;
+PrimitiveType: {infer PrimitiveType} name=('Int' | 'Float' | 'String' | 'Bool' | 'Void' | 'Byte' | 'Long' | 'Struct' | 'Class');
 NamedType: {infer NamedType} ref=[Declaration:ValidID];
 
 // ==========================================
@@ -132,7 +133,7 @@ LogicalAnd infers Expression:
     Equality ({infer BinaryExpression.left=current} op='&&' right=Equality)*;
 
 Equality infers Expression: 
-    Relational ({infer BinaryExpression.left=current} (op='==' | op='!=' | (op='is' isNot?='!'?) | op='in') right=Relational)*;
+    Relational ({infer BinaryExpression.left=current} op=('==' | '!=' | 'is' | 'in') right=Relational)*;
 
 Relational infers Expression: 
     Additive ({infer BinaryExpression.left=current} op=('<' | '>' | '<=' | '>=') right=Additive)*;

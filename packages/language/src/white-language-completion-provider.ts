@@ -49,14 +49,30 @@ export class WhiteLanguageCompletionProvider extends DefaultCompletionProvider {
                 return;
             }
         }
-        const structDef = myScopeProvider.inferStructType(receiver) as ast.StructDecl | undefined;
-        if (structDef) {
-            for (const field of structDef.fields) {
-                const isFunc = ast.isFunctionType(field.type);
-                const typeStr = field.type ? field.type.$cstNode?.text : 'Unknown';
+        const def = myScopeProvider.inferStructOrClassType(receiver);
+        if (def) {
+            const members = ast.isStructDecl(def) ? def.fields : def.members;
+
+            for (const m of members) {
+                if (!m.name) continue;
+
+                let kind: CompletionItemKind;
+                let typeStr = 'Unknown';
+
+                if (ast.isClassMethod(m) || ast.isClassInit(m) || ast.isClassDeinit(m)) {
+                    kind = CompletionItemKind.Method;
+                    typeStr = m.returnType?.$cstNode?.text ?? 'Void';
+                } else {
+                    const fieldType = (m as any).type as ast.TypeReference | undefined;
+                    const isFunc = fieldType && ast.isFunctionType(fieldType);
+                    
+                    kind = isFunc ? CompletionItemKind.Method : CompletionItemKind.Property;
+                    typeStr = fieldType?.$cstNode?.text ?? 'Unknown';
+                }
+
                 acceptor(context, {
-                    label: field.name,
-                    kind: isFunc ? CompletionItemKind.Method : CompletionItemKind.Property,
+                    label: m.name,
+                    kind: kind,
                     detail: `-> ${typeStr}`
                 });
             }

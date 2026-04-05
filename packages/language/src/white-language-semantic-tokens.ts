@@ -7,9 +7,11 @@ import { WhiteLanguageScopeProvider } from './white-language-scope-provider.js';
 
 export class WhiteLanguageSemanticTokenProvider extends AbstractSemanticTokenProvider {
     private scopeProvider: WhiteLanguageScopeProvider;
+    private services: WhiteLanguageServices;
 
     constructor(services: WhiteLanguageServices) {
         super(services);
+        this.services = services;
         this.scopeProvider = services.references.ScopeProvider as WhiteLanguageScopeProvider;
     }
 
@@ -113,6 +115,9 @@ export class WhiteLanguageSemanticTokenProvider extends AbstractSemanticTokenPro
         else if (ast.isFunctionType(node)) {
             this.highlightKeywordOrValue(node, 'Function', acceptor, SemanticTokenTypes.type);
         }
+        else if (ast.isMethodType(node)) {
+            this.highlightKeywordOrValue(node, 'Method', acceptor, SemanticTokenTypes.type);
+        }
         else if (ast.isLiteral(node)) {
             const text = node.$cstNode?.text;
             if (text === 'true' || text === 'false' || text === 'null' || text === 'nullptr') {
@@ -147,28 +152,43 @@ export class WhiteLanguageSemanticTokenProvider extends AbstractSemanticTokenPro
     private highlightMemberAccess(node: ast.MemberAccess, acceptor: SemanticTokenAcceptor) {
         const receiver = node.receiver;
 
-        if (ast.isFunctionCall(node.$container) && node.$container.caller === node) {
-            acceptor({ node, property: 'member', type: SemanticTokenTypes.function });
-            return;
-        }
-
         if (ast.isReference(receiver)) {
             let ref = receiver.ref?.ref;
-            if (ast.isSymbolImport(ref)) {
-                ref = ref.importedElement?.ref;
-            }
+            if (ast.isSymbolImport(ref)) ref = ref.importedElement?.ref;
+            
             if (ast.isFileImport(ref)) {
                 const scope = this.scopeProvider.getScopeFromImportedFile(ref);
                 const element = scope.getElement(node.member);
-                
                 if (element) {
                     const typeName = element.type;
                     if (typeName.endsWith('FunctionDecl') || typeName.endsWith('ExternFuncDecl') || typeName.endsWith('ClassMethod')) {
                         acceptor({ node, property: 'member', type: SemanticTokenTypes.function });
-                        return;
                     } else if (typeName.endsWith('StructDecl') || typeName.endsWith('ClassDecl')) {
                         acceptor({ node, property: 'member', type: SemanticTokenTypes.class });
-                        return;
+                    } else {
+                        acceptor({ node, property: 'member', type: SemanticTokenTypes.property });
+                    }
+                    return;
+                }
+
+                const docs = this.services.shared.workspace.LangiumDocuments;
+                const cleanPath = ref.path.replace(/"/g, '').replace(/\.wl$/, '');
+                for (const doc of docs.all) {
+                    if (doc.uri.toString().includes(cleanPath)) {
+                        const program = doc.parseResult.value;
+                        if (ast.isProgram(program)) {
+                            for (const stmt of program.statements) {
+                                if (ast.isFunctionDecl(stmt) && stmt.name === node.member) {
+                                    acceptor({ node, property: 'member', type: SemanticTokenTypes.function }); return;
+                                }
+                                if ((ast.isVariableDecl(stmt) || ast.isForVarDecl(stmt)) && stmt.name === node.member) {
+                                    acceptor({ node, property: 'member', type: SemanticTokenTypes.property }); return;
+                                }
+                                if (ast.isExternBlock(stmt) && stmt.funcs.find(f => f.name === node.member)) {
+                                    acceptor({ node, property: 'member', type: SemanticTokenTypes.function }); return;
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -179,7 +199,7 @@ export class WhiteLanguageSemanticTokenProvider extends AbstractSemanticTokenPro
             const members = 'fields' in def ? def.fields : def.members;
             const field = members.find((f: any) => f.name === node.member);
             if (field) {
-                if (ast.isClassMethod(field) || ast.isClassInit(field) || ast.isClassDeinit(field) || ast.isFunctionType((field as any).type)) {
+                if (ast.isClassMethod(field) || ast.isClassInit(field) || ast.isClassDeinit(field) || ast.isFunctionType((field as any).type) || ast.isMethodType((field as any).type)) {
                     acceptor({ node, property: 'member', type: SemanticTokenTypes.function });
                 } else {
                     acceptor({ node, property: 'member', type: SemanticTokenTypes.property });
@@ -188,7 +208,11 @@ export class WhiteLanguageSemanticTokenProvider extends AbstractSemanticTokenPro
             }
         }
 
-        acceptor({ node, property: 'member', type: SemanticTokenTypes.property });
+        if (ast.isFunctionCall(node.$container) && node.$container.caller === node) {
+            acceptor({ node, property: 'member', type: SemanticTokenTypes.function });
+        } else {
+            acceptor({ node, property: 'member', type: SemanticTokenTypes.property });
+        }
     }
 
     private highlightDeclarationType(node: AstNode, property: string, ref: ast.Declaration, acceptor: SemanticTokenAcceptor) {

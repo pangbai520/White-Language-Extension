@@ -77,7 +77,8 @@ export class WhiteLanguageValidator {
             return true;
         }
 
-        if (expected === 'Struct' || actual === 'Struct' || expected === 'Function' || actual === 'Function') {
+        if (expected === 'Struct' || actual === 'Struct' || expected === 'Class' || actual === 'Class' || 
+            expected === 'Function' || actual === 'Function' || expected === 'Method' || actual === 'Method') {
             return true;
         }
 
@@ -88,7 +89,7 @@ export class WhiteLanguageValidator {
         if (expected === 'Float' && ['Int', 'Byte', 'Long', 'Bool'].includes(actual)) return true;
         if (expected === 'Long' && ['Int', 'Byte', 'Bool'].includes(actual)) return true;
         if (expected === 'Int' && ['Byte', 'Bool'].includes(actual)) return true;
-        if (expected === 'Byte' && actual === 'Int') return true; // 后端自带 trunc
+        if (expected === 'Byte' && actual === 'Int') return true;
 
         const primitives = ['Int', 'Float', 'Bool', 'Byte', 'Long', 'String', 'Void'];
 
@@ -180,6 +181,12 @@ export class WhiteLanguageValidator {
         else if (ast.isVectorType(type)) {
             typeName = 'Vector';
         }
+        else if (ast.isFunctionType(type)) {
+            typeName = 'Function';
+        }
+        else if (ast.isMethodType(type)) {
+            typeName = 'Method';
+        }
 
         if (isPtr) {
             let level = ptrLevel ?? 1;
@@ -222,7 +229,7 @@ export class WhiteLanguageValidator {
     }
 
     checkStructName(struct: ast.StructDecl, accept: ValidationAcceptor): void {
-        const builtInTypes = ['Int', 'Float', 'String', 'Bool', 'Void', 'Byte', 'Long', 'Struct', 'Vector', 'Function'];
+        const builtInTypes = ['Int', 'Float', 'String', 'Bool', 'Void', 'Byte', 'Long', 'Struct', 'Class', 'Vector', 'Function', 'Method'];
         if (struct.name && builtInTypes.includes(struct.name)) {
             accept('error', `Type name '${struct.name}' is reserved and cannot be used as a struct name.`, { node: struct, property: 'name' });
         }

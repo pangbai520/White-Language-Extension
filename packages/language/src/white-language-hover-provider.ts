@@ -23,7 +23,8 @@ export class WhiteLanguageHoverProvider extends AstNodeHoverProvider {
 
 
         if (ast.isVariableDecl(node) || ast.isForVarDecl(node) || ast.isParam(node) || 
-            ast.isFunctionDecl(node) || ast.isExternFuncDecl(node) || ast.isStructDecl(node)) {
+            ast.isFunctionDecl(node) || ast.isExternFuncDecl(node) || ast.isStructDecl(node) ||
+            ast.isClassDecl(node) || ast.isClassMethod(node) || ast.isClassField(node)) {
             return this.getDeclarationInfo(node);
         }
 
@@ -67,6 +68,22 @@ export class WhiteLanguageHoverProvider extends AstNodeHoverProvider {
 
         if (ast.isFileImport(decl)) {
             return `\`\`\`whitelang\nmodule ${decl.name || decl.path}\n\`\`\``;
+        }
+
+        if (ast.isClassDecl(decl)) {
+            const superStr = decl.superClass ? ` (extends ${decl.superClass.$refText})` : '';
+            return `\`\`\`whitelang\nclass ${decl.name}${superStr}\n\`\`\``;
+        }
+
+        if (ast.isClassMethod(decl)) {
+            const params = decl.params.map(p => `${p.name} -> ${p.type?.$cstNode?.text ?? 'Unknown'}`).join(', ');
+            const retType = decl.returnType ? decl.returnType.$cstNode?.text : 'Void';
+            return `\`\`\`whitelang\nmethod ${decl.name}(${params}) -> ${retType}\n\`\`\``;
+        }
+
+        if (ast.isClassField(decl)) {
+            const isPtrStr = decl.isPtr ? `ptr ` : '';
+            return `\`\`\`whitelang\n${decl.kind} ${decl.name} -> ${isPtrStr}${decl.type?.$cstNode?.text ?? 'Unknown'}\n\`\`\``;
         }
         
         return undefined;

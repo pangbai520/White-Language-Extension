@@ -13,6 +13,7 @@ import {
 import type { CancellationToken } from 'vscode-languageserver';
 import { Utils } from 'vscode-uri'; 
 import * as ast from './generated/ast.js';
+import type { WhiteLanguageServices } from './white-language-module.js';
 
 export class WhiteLanguageScopeComputation extends DefaultScopeComputation {
     async computeExports(document: LangiumDocument, _cancelToken?: CancellationToken): Promise<AstNodeDescription[]> {
@@ -60,6 +61,16 @@ export class WhiteLanguageScopeComputation extends DefaultScopeComputation {
 export class WhiteLanguageScopeProvider extends DefaultScopeProvider {
     private typeCache = new WeakMap<AstNode, ast.StructDecl | ast.ClassDecl | undefined>();
     private importScopeCache = new WeakMap<AstNode, Scope>();
+    private services: WhiteLanguageServices;
+
+    constructor(services: WhiteLanguageServices) {
+        super(services);
+        this.services = services;
+    }
+
+    protected override getGlobalScope(referenceType: string, _context: ReferenceInfo): Scope {
+        return EMPTY_SCOPE;
+    }
 
     override getScope(context: ReferenceInfo): Scope {
         const container = context.container;
@@ -86,6 +97,14 @@ export class WhiteLanguageScopeProvider extends DefaultScopeProvider {
                             const name = fi.name ?? fi.path.replace(/"/g, '').split('/').pop()?.replace('.wl', '');
                             if (name) {
                                 descriptions.push(this.descriptions.createDescription(fi, name));
+                            }
+
+                            const defProvider = this.services.lsp.DefinitionProvider;
+                            const subUri = (defProvider as any).resolvePackageUri(AstUtils.getDocument(stmt).uri, fi.path);
+
+                            if (subUri && !subUri.path.endsWith('_pkg.wl')) {
+                                const fileScope = this.getScopeFromImportedFile(fi);
+                                descriptions.push(...fileScope.getAllElements());
                             }
                         }
                     }

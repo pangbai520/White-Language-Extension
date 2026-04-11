@@ -72,68 +72,92 @@ export class WhiteLanguageScopeProvider extends DefaultScopeProvider {
     protected override getGlobalScope(referenceType: string, context: ReferenceInfo): Scope {
         const program = AstUtils.getContainerOfType(context.container, ast.isProgram);
         if (!program) return EMPTY_SCOPE;
-        let globalScope = this.programImportScopeCache.get(program);
-        if (globalScope) return globalScope;
 
-        const descriptions: AstNodeDescription[] = [];
-
-        for (const stmt of program.statements) {
-            if (ast.isExternBlock(stmt)) {
-                for (const func of stmt.funcs) {
-                    if (func.name) {
-                        descriptions.push(this.descriptions.createDescription(func, func.name, AstUtils.getDocument(stmt)));
+        let importScope = this.programImportScopeCache.get(program);
+        
+        if (!importScope) {
+            const descriptions: AstNodeDescription[] = [];
+            for (const stmt of program.statements) {
+                if (ast.isExternBlock(stmt)) {
+                    for (const func of stmt.funcs) {
+                        if (func.name) {
+                            descriptions.push(this.descriptions.createDescription(func, func.name, AstUtils.getDocument(stmt)));
+                        }
                     }
-                }
-            } else if (ast.isExternSingleStmt(stmt) && stmt.func) {
-                if (stmt.func.name) {
-                    descriptions.push(this.descriptions.createDescription(stmt.func, stmt.func.name, AstUtils.getDocument(stmt)));
-                }
-            }
-        }
-
-        for (const stmt of program.statements) {
-            if (ast.isImport(stmt)) {
-                for (const si of stmt.symbolImports) {
-                    const name = si.name ?? si.importedElement?.$refText;
-                    if (name) descriptions.push(this.descriptions.createDescription(si, name, AstUtils.getDocument(stmt)));
-                }
-                for (const fi of stmt.fileImports) {
-                    const cleanPath = fi.path.replace(/"/g, '').replace(/\.wl$/, '');
-                    const name = fi.name ?? cleanPath.split('/').pop();
-                    if (name) descriptions.push(this.descriptions.createDescription(fi, name, AstUtils.getDocument(stmt)));
-
-                    const targetUri = this.resolvePackageUri(AstUtils.getDocument(stmt).uri, fi.path);
-                    if (targetUri && !targetUri.path.endsWith('_pkg.wl')) {
-                        const fileElements = this.indexManager.allElements().filter(desc => 
-                            desc.documentUri.toString() === targetUri.toString()
-                        ).toArray();
-                        descriptions.push(...fileElements);
+                } else if (ast.isExternSingleStmt(stmt) && stmt.func) {
+                    if (stmt.func.name) {
+                        descriptions.push(this.descriptions.createDescription(stmt.func, stmt.func.name, AstUtils.getDocument(stmt)));
                     }
                 }
             }
+
+            for (const stmt of program.statements) {
+                if (ast.isImport(stmt)) {
+                    for (const si of stmt.symbolImports) {
+                        const name = si.name ?? si.importedElement?.$refText;
+                        if (name) descriptions.push(this.descriptions.createDescription(si, name, AstUtils.getDocument(stmt)));
+                    }
+                    for (const fi of stmt.fileImports) {
+                        const cleanPath = fi.path.replace(/"/g, '').replace(/\.wl$/, '');
+                        const name = fi.name ?? cleanPath.split('/').pop();
+                        
+                        if (name) {
+                            descriptions.push(this.descriptions.createDescription(fi, name, AstUtils.getDocument(stmt)));
+                        }
+
+                        const targetUri = this.resolvePackageUri(AstUtils.getDocument(stmt).uri, fi.path);
+                        
+                        if (targetUri) {
+                            const isPackage = targetUri.path.endsWith('_pkg.wl');
+                            if (!isPackage) {
+                                const fileElements = this.indexManager.allElements().filter(desc => 
+                                    desc.documentUri.toString() === targetUri.toString()
+                                ).toArray();
+                                descriptions.push(...fileElements);
+                            }
+                        }
+                    }
+                }
+            }
+            importScope = this.createScope(descriptions, EMPTY_SCOPE);
+            this.programImportScopeCache.set(program, importScope);
         }
 
-        globalScope = this.createScope(descriptions, EMPTY_SCOPE);
-        this.programImportScopeCache.set(program, globalScope);
-        return globalScope;
+        return importScope;
     }
 
     private resolvePackageUri(sourceDocUri: URI, rawPath: string): URI | undefined {
-        const cleanPath = rawPath.replace(/"/g, '').replace(/\.wl$/, '');
+        const actualPath = rawPath.replace(/"/g, '');
+        const hasExtension = actualPath.endsWith('.wl');
+        const cleanPath = hasExtension ? actualPath.substring(0, actualPath.length - 3) : actualPath;
+
         const baseUri = Utils.resolvePath(Utils.dirname(sourceDocUri), cleanPath);
         const documents = this.services.shared.workspace.LangiumDocuments;
+
         const fileUri = baseUri.with({ path: baseUri.path + '.wl' });
         const pkgUri = baseUri.with({ path: baseUri.path + '/_pkg.wl' });
-        
-        if (documents.hasDocument(fileUri)) return fileUri;
-        if (documents.hasDocument(pkgUri)) return pkgUri;
 
-        for (const doc of documents.all) {
-            const path = doc.uri.path;
+        if (hasExtension) {
+            if (documents.hasDocument(fileUri)) return fileUri;
+        } else {
+            if (documents.hasDocument(pkgUri)) return pkgUri;
+        }
+
+        for (const desc of this.indexManager.allElements()) {
+            const path = desc.documentUri.path;
+            
             if (path.endsWith(`/${cleanPath}.wl`) || path.endsWith(`/${cleanPath}/_pkg.wl`)) {
-                return doc.uri;
+
+                if (!hasExtension && path.endsWith(`/${cleanPath}.wl`)) {
+                    if (desc.documentUri.toString() === fileUri.toString()) {
+                        continue;
+                    }
+                }
+                
+                return desc.documentUri;
             }
         }
+
         return undefined;
     }
 

@@ -7,11 +7,10 @@ import {
     type LangiumDocument,
     type AstNodeDescription,
     EMPTY_SCOPE,
-    StreamScope,
     type AstNode,
 } from 'langium';
 import type { CancellationToken } from 'vscode-languageserver';
-import { Utils } from 'vscode-uri'; 
+import { Utils, URI } from 'vscode-uri'; 
 import * as ast from './generated/ast.js';
 import type { WhiteLanguageServices } from './white-language-module.js';
 
@@ -61,6 +60,8 @@ export class WhiteLanguageScopeComputation extends DefaultScopeComputation {
 export class WhiteLanguageScopeProvider extends DefaultScopeProvider {
     private typeCache = new WeakMap<AstNode, ast.StructDecl | ast.ClassDecl | undefined>();
     private importScopeCache = new WeakMap<AstNode, Scope>();
+    private programImportScopeCache = new WeakMap<ast.Program, Scope>();
+    
     private services: WhiteLanguageServices;
 
     constructor(services: WhiteLanguageServices) {
@@ -68,57 +69,83 @@ export class WhiteLanguageScopeProvider extends DefaultScopeProvider {
         this.services = services;
     }
 
-    protected override getGlobalScope(referenceType: string, _context: ReferenceInfo): Scope {
-        return EMPTY_SCOPE;
+    protected override getGlobalScope(referenceType: string, context: ReferenceInfo): Scope {
+        const program = AstUtils.getContainerOfType(context.container, ast.isProgram);
+        if (!program) return EMPTY_SCOPE;
+
+        let importScope = this.programImportScopeCache.get(program);
+        
+        if (!importScope) {
+            const descriptions: AstNodeDescription[] = [];
+            for (const stmt of program.statements) {
+                if (ast.isImport(stmt)) {
+                    for (const si of stmt.symbolImports) {
+                        const name = si.name ?? si.importedElement?.$refText;
+                        if (name) {
+                            descriptions.push(this.descriptions.createDescription(si, name, AstUtils.getDocument(stmt)));
+                        }
+                    }
+                    for (const fi of stmt.fileImports) {
+                        const cleanPath = fi.path.replace(/"/g, '').replace(/\.wl$/, '');
+                        const name = fi.name ?? cleanPath.split('/').pop();
+                        
+                        if (name) {
+                            descriptions.push(this.descriptions.createDescription(fi, name, AstUtils.getDocument(stmt)));
+                        }
+
+                        const targetUri = this.resolvePackageUri(AstUtils.getDocument(stmt).uri, fi.path);
+                        
+                        if (targetUri) {
+                            const isPackage = targetUri.path.endsWith('_pkg.wl');
+                            if (!isPackage) {
+                                const fileElements = this.indexManager.allElements().filter(desc => 
+                                    desc.documentUri.toString() === targetUri.toString()
+                                ).toArray();
+                                descriptions.push(...fileElements);
+                            }
+                        }
+                    }
+                }
+            }
+            importScope = this.createScope(descriptions, EMPTY_SCOPE);
+            this.programImportScopeCache.set(program, importScope);
+        }
+
+        return importScope;
+    }
+
+    private resolvePackageUri(sourceDocUri: URI, rawPath: string): URI | undefined {
+        const cleanPath = rawPath.replace(/"/g, '').replace(/\.wl$/, '');
+        const baseUri = Utils.resolvePath(Utils.dirname(sourceDocUri), cleanPath);
+        
+        const documents = this.services.shared.workspace.LangiumDocuments;
+
+        const fileUri = baseUri.with({ path: baseUri.path + '.wl' });
+        const pkgUri = baseUri.with({ path: baseUri.path + '/_pkg.wl' });
+        
+        if (documents.hasDocument(fileUri)) return fileUri;
+        if (documents.hasDocument(pkgUri)) return pkgUri;
+
+        const globalMatch = this.indexManager.allElements().find(desc => {
+            const path = desc.documentUri.path;
+            return path.endsWith(`/${cleanPath}.wl`) || path.endsWith(`/${cleanPath}/_pkg.wl`);
+        });
+
+        if (globalMatch) return globalMatch.documentUri;
+
+        return undefined;
     }
 
     override getScope(context: ReferenceInfo): Scope {
         const container = context.container;
+        
         if (ast.isSymbolImport(container) && context.property === 'importedElement') {
             const importStmt = container.$container as ast.Import;
             if (importStmt.fromPath) {
                 return this.getScopeByPath(container, importStmt.fromPath);
             }
         }
-        if (context.property === 'ref' || (ast.isReference(container) && context.property === 'ref')) {
-            const program = AstUtils.getContainerOfType(container, ast.isProgram);
-            if (program) {
-                const descriptions: AstNodeDescription[] = [];
-                
-                for (const stmt of program.statements) {
-                    if (ast.isImport(stmt)) {
-                        for (const si of stmt.symbolImports) {
-                            const name = si.name ?? si.importedElement?.$refText;
-                            if (name) {
-                                descriptions.push(this.descriptions.createDescription(si, name));
-                            }
-                        }
-                        for (const fi of stmt.fileImports) {
-                            const name = fi.name ?? fi.path.replace(/"/g, '').split('/').pop()?.replace('.wl', '');
-                            if (name) {
-                                descriptions.push(this.descriptions.createDescription(fi, name));
-                            }
-
-                            const defProvider = this.services.lsp.DefinitionProvider;
-                            const subUri = (defProvider as any).resolvePackageUri(AstUtils.getDocument(stmt).uri, fi.path);
-
-                            if (subUri && !subUri.path.endsWith('_pkg.wl')) {
-                                const fileScope = this.getScopeFromImportedFile(fi);
-                                descriptions.push(...fileScope.getAllElements());
-                            }
-                        }
-                    }
-                }
-                const importScope = this.createScope(descriptions, super.getScope(context));
-                const localExterns: AstNode[] = [];
-                for (const stmt of program.statements) {
-                    if (ast.isExternBlock(stmt)) localExterns.push(...stmt.funcs);
-                    else if (ast.isExternSingleStmt(stmt) && stmt.func) localExterns.push(stmt.func);
-                }
-
-                return this.createScopeForNodes(localExterns, importScope);
-            }
-        }
+        
         if (ast.isMemberAccess(container) && context.property === 'member') {
             const receiver = container.receiver;
             if (ast.isReference(receiver)) {
@@ -142,33 +169,24 @@ export class WhiteLanguageScopeProvider extends DefaultScopeProvider {
         if (this.importScopeCache.has(contextNode)) {
             return this.importScopeCache.get(contextNode)!;
         }
-        const currentDoc = AstUtils.getDocument(contextNode);
-        const cleanPath = rawPath.replace(/"/g, '');
+        
+        const targetUri = this.resolvePackageUri(AstUtils.getDocument(contextNode).uri, rawPath);
+        let exportedNodes: AstNodeDescription[] = [];
 
-        const baseUri = Utils.resolvePath(Utils.dirname(currentDoc.uri), cleanPath);
-        const baseUriStr = baseUri.toString();
-        const fileUri = baseUriStr.endsWith('.wl') ? baseUri : baseUri.with({ path: baseUri.path + '.wl' });
-        const fileUriStr = fileUri.toString();
-        const dirUriStr = baseUriStr.endsWith('/') ? baseUriStr : baseUriStr + '/';
-
-        const globalFileSuffix = cleanPath.endsWith('.wl') ? `/${cleanPath}` : `/${cleanPath}.wl`;
-        const globalDirSuffix = `/${cleanPath}/`;
-
-        const exportedNodes = this.indexManager.allElements().filter(desc => {
-            const docUriStr = desc.documentUri.toString();
-            
-            if (docUriStr === fileUriStr || docUriStr.startsWith(dirUriStr)) {
-                return true;
+        if (targetUri) {
+            if (targetUri.path.endsWith('_pkg.wl')) {
+                const dirUriStr = Utils.dirname(targetUri).toString() + '/';
+                exportedNodes = this.indexManager.allElements().filter(desc => 
+                    desc.documentUri.toString().startsWith(dirUriStr)
+                ).toArray();
+            } else {
+                exportedNodes = this.indexManager.allElements().filter(desc => 
+                    desc.documentUri.toString() === targetUri.toString()
+                ).toArray();
             }
+        }
 
-            if (docUriStr.endsWith(globalFileSuffix) || docUriStr.includes(globalDirSuffix)) {
-                return true;
-            }
-
-            return false;
-        });
-
-        const scope = new StreamScope(exportedNodes);
+        const scope = this.createScope(exportedNodes);
         this.importScopeCache.set(contextNode, scope);
         return scope;
     }

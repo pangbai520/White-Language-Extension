@@ -13,7 +13,7 @@ Statement:
 
 DeclarationStmt:
     (VariableDecl | ExternSingleStmt) ';' |
-    (FunctionDecl | StructDecl | ClassDecl | ExternBlock);
+    (FunctionDecl | StructDecl | ClassDecl | ExternBlock | TypeExtension);
 
 ControlStmt:
     IfStmt | WhileStmt | ForStmt;
@@ -34,7 +34,7 @@ Block:
 // Declarations
 // ==========================================
 type Declaration = VariableDecl | FunctionDecl | StructDecl | ClassDecl | ClassField | ClassMethod | ClassInit | ClassDeinit | ExternFuncDecl | ForVarDecl | Param | SymbolImport |
-    FileImport;
+    FileImport | TypeExtension;
 
 VariableDecl:
     {infer VariableDecl} kind=('let' | 'const') (isPtr?='ptr' ('*' ptrLevel=INT)?)? name=ValidID '->' type=TypeReference ('=' value=Expression)?;
@@ -79,6 +79,11 @@ ExternSingleStmt:
 
 ExternFuncDecl:
     {infer ExternFuncDecl} 'func' name=ValidID '(' (params+=Param (',' params+=Param)*)? (','? varArgs?='...')? ')' ('->' returnType=TypeReference)?;
+
+TypeExtension:
+    {infer TypeExtension} 'type' type=TypeReference '{'
+        (methods+=FunctionDecl)*
+    '}';
 
 // ==========================================
 // Imports
@@ -161,7 +166,7 @@ Postfix infers Expression:
     )*;
 
 ValidID returns string:
-    ID | 'init' | 'deinit' | 'this' | 'self' | 'super';
+    ID | 'init' | 'deinit' | 'this' | 'self' | 'super' | 'type';
 
 Primary infers Expression:
     '(' Expression ')' |

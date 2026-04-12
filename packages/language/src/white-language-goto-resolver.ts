@@ -191,6 +191,35 @@ export class WhiteLanguageDefinitionProvider extends DefaultDefinitionProvider {
             return members.find((m: any) => m.name === node.member);
         }
 
+        const typeStr = (this.scopeProvider as any).inferExpressionTypeStr(receiver);
+        if (typeStr) {
+            const program = AstUtils.getContainerOfType(node, ast.isProgram);
+            if (program) {
+                for (const stmt of program.statements) {
+                    if (ast.isTypeExtension(stmt)) {
+                        let tName = '';
+                        if (ast.isPrimitiveType(stmt.type)) tName = stmt.type.name ?? '';
+                        else if (ast.isNamedType(stmt.type)) tName = stmt.type.ref?.$refText || '';
+                        if (tName === typeStr) {
+                            const method = stmt.methods.find(m => m.name === node.member);
+                            if (method) return method;
+                        }
+                    }
+                }
+                const globalScope = (this.scopeProvider as any).programImportScopeCache.get(program);
+                if (globalScope) {
+                    const extElems = globalScope.getAllElements().toArray().filter((e: any) => e.name === `__ext_${typeStr}`);
+                    for (const e of extElems) {
+                        const extNode = e.node;
+                        if (extNode && ast.isTypeExtension(extNode)) {
+                            const method = extNode.methods.find((m: any) => m.name === node.member);
+                            if (method) return method;
+                        }
+                    }
+                }
+            }
+        }
+
         return undefined;
     }
 

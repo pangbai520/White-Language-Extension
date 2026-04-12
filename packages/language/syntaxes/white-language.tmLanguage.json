@@ -10,7 +10,7 @@
     },
     {
       "name": "keyword.control.white-language",
-      "match": "\\b(Bool|Byte|Class|Float|Function|Int|Long|Method|String|Struct|Vector|Void|as|break|class|const|continue|deinit|deref|else|extern|false|for|from|func|if|import|in|init|is|let|method|null|nullptr|ptr|ref|return|self|struct|super|this|true|while)\\b"
+      "match": "\\b(Bool|Byte|Class|Float|Function|Int|Long|Method|String|Struct|Vector|Void|as|break|class|const|continue|deinit|deref|else|extern|false|for|from|func|if|import|in|init|is|let|method|null|nullptr|ptr|ref|return|self|struct|super|this|true|type|while)\\b"
     },
     {
       "name": "string.quoted.double.white-language",

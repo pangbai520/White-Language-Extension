@@ -77,5 +77,19 @@ export class WhiteLanguageCompletionProvider extends DefaultCompletionProvider {
                 });
             }
         }
+
+        const typeStr = myScopeProvider.inferExpressionTypeStr(receiver);
+        if (typeStr) {
+            const scope = myScopeProvider.getScope({ container: context.node, property: 'member', reference: undefined as any });
+            for (const desc of scope.getAllElements()) {
+                if (desc.type.endsWith('FunctionDecl')) {
+                    acceptor(context, {
+                        label: desc.name,
+                        kind: CompletionItemKind.Method,
+                        detail: `(extension)`
+                    });
+                }
+            }
+        }
     }
 }

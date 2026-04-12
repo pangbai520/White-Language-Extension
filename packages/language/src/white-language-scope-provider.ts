@@ -51,6 +51,14 @@ export class WhiteLanguageScopeComputation extends DefaultScopeComputation {
                         exportedItems.push(this.descriptions.createDescription(node.func, node.func.name, document));
                     }
                 }
+                else if (ast.isTypeExtension(node)) {
+                    let typeName = '';
+                    if (ast.isPrimitiveType(node.type)) typeName = node.type.name ?? '';
+                    else if (ast.isNamedType(node.type)) typeName = node.type.ref?.$refText || '';
+                    if (typeName) {
+                        exportedItems.push(this.descriptions.createDescription(node, `__ext_${typeName}`, document));
+                    }
+                }
             }
         }
         return exportedItems;
@@ -111,7 +119,7 @@ export class WhiteLanguageScopeProvider extends DefaultScopeProvider {
                             const isPackage = targetUri.path.endsWith('_pkg.wl');
                             if (!isPackage) {
                                 const fileElements = this.indexManager.allElements().filter(desc => 
-                                    desc.documentUri.toString() === targetUri.toString()
+                                    desc.documentUri.path === targetUri.path
                                 ).toArray();
                                 descriptions.push(...fileElements);
                             }
@@ -149,7 +157,7 @@ export class WhiteLanguageScopeProvider extends DefaultScopeProvider {
             if (path.endsWith(`/${cleanPath}.wl`) || path.endsWith(`/${cleanPath}/_pkg.wl`)) {
 
                 if (!hasExtension && path.endsWith(`/${cleanPath}.wl`)) {
-                    if (desc.documentUri.toString() === fileUri.toString()) {
+                    if (desc.documentUri.path === fileUri.path) {
                         continue;
                     }
                 }
@@ -184,6 +192,36 @@ export class WhiteLanguageScopeProvider extends DefaultScopeProvider {
                 const members = 'fields' in def ? def.fields : def.members;
                 return this.createScopeForNodes(members);
             }
+
+            const typeStr = this.inferExpressionTypeStr(container.receiver);
+            if (typeStr) {
+                const extMethods: ast.FunctionDecl[] = [];
+                const program = AstUtils.getContainerOfType(container, ast.isProgram);
+                if (program) {
+                    for (const stmt of program.statements) {
+                        if (ast.isTypeExtension(stmt)) {
+                            let tName = '';
+                            if (ast.isPrimitiveType(stmt.type)) tName = stmt.type.name ?? '';
+                            else if (ast.isNamedType(stmt.type)) tName = stmt.type.ref?.$refText || '';
+                            if (tName === typeStr) extMethods.push(...stmt.methods);
+                        }
+                    }
+                    const globalScope = this.programImportScopeCache.get(program);
+                    if (globalScope) {
+                        const extElems = globalScope.getAllElements().toArray().filter(e => e.name === `__ext_${typeStr}`);
+                        for (const e of extElems) {
+                            const extNode = e.node;
+                            if (extNode && ast.isTypeExtension(extNode)) {
+                                extMethods.push(...extNode.methods);
+                            }
+                        }
+                    }
+                }
+                if (extMethods.length > 0) {
+                    return this.createScopeForNodes(extMethods);
+                }
+            }
+
             return EMPTY_SCOPE;
         }
 
@@ -200,13 +238,13 @@ export class WhiteLanguageScopeProvider extends DefaultScopeProvider {
 
         if (targetUri) {
             if (targetUri.path.endsWith('_pkg.wl')) {
-                const dirUriStr = Utils.dirname(targetUri).toString() + '/';
+                const dirUriStr = Utils.dirname(targetUri).path + '/';
                 exportedNodes = this.indexManager.allElements().filter(desc => 
-                    desc.documentUri.toString().startsWith(dirUriStr)
+                    desc.documentUri.path.startsWith(dirUriStr)
                 ).toArray();
             } else {
                 exportedNodes = this.indexManager.allElements().filter(desc => 
-                    desc.documentUri.toString() === targetUri.toString()
+                    desc.documentUri.path === targetUri.path
                 ).toArray();
             }
         }
@@ -279,6 +317,49 @@ export class WhiteLanguageScopeProvider extends DefaultScopeProvider {
 
         this.typeCache.set(node, result);
         return result;
+    }
+
+    public inferExpressionTypeStr(node: ast.Expression): string | undefined {
+        if (ast.isLiteral(node)) {
+            const text = node.$cstNode?.text || "";
+            if (text.startsWith('"')) return 'String';
+            if (text === 'true' || text === 'false') return 'Bool';
+            if (text.includes('.')) return 'Float';
+            if (text === 'null' || text === 'nullptr') return 'Pointer';
+            return 'Int';
+        }
+        if (ast.isReference(node)) {
+            const decl = node.ref?.ref;
+            if (ast.isVariableDecl(decl) || ast.isForVarDecl(decl) || ast.isParam(decl) || ast.isClassField(decl)) {
+                return this.getTypeRefString(decl.type);
+            }
+        }
+        if (ast.isFunctionCall(node)) {
+            const caller = node.caller;
+            if (ast.isReference(caller)) {
+                const func = caller.ref?.ref;
+                if (ast.isFunctionDecl(func) || ast.isExternFuncDecl(func) || ast.isClassMethod(func)) {
+                    return this.getTypeRefString((func as any).returnType);
+                }
+            }
+        }
+        if (ast.isThisExpression(node) || ast.isSelfExpression(node)) {
+            const ext = AstUtils.getContainerOfType(node, ast.isTypeExtension);
+            if (ext) return this.getTypeRefString(ext.type);
+            const cls = AstUtils.getContainerOfType(node, ast.isClassDecl);
+            if (cls) return cls.name;
+            const str = AstUtils.getContainerOfType(node, ast.isStructDecl);
+            if (str) return str.name;
+        }
+        return undefined;
+    }
+
+    private getTypeRefString(type: ast.TypeReference | undefined): string | undefined {
+        if (!type) return undefined;
+        if (ast.isPrimitiveType(type)) return type.name;
+        if (ast.isNamedType(type)) return type.ref?.$refText;
+        if (ast.isPointerType(type)) return `ptr<${this.getTypeRefString(type.elementType)}>`;
+        return undefined;
     }
 
     private resolveTypeToStructOrClass(type: ast.TypeReference | undefined): ast.StructDecl | ast.ClassDecl | undefined {

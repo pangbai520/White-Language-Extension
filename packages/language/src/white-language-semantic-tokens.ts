@@ -53,6 +53,9 @@ export class WhiteLanguageSemanticTokenProvider extends AbstractSemanticTokenPro
             const modifiers = node.kind === 'const' ? [SemanticTokenModifiers.readonly] : [];
             acceptor({ node, property: 'name', type: SemanticTokenTypes.property, modifier: modifiers });
         }
+        else if (ast.isTypeExtension(node)) {
+            this.highlightKeywordOrValue(node, 'type', acceptor);
+        }
         else if (ast.isClassMethod(node)) {
             this.highlightKeywordOrValue(node, 'method', acceptor);
             acceptor({ node, property: 'name', type: SemanticTokenTypes.method });
